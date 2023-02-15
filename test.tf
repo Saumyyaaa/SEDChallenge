@@ -1,0 +1,68 @@
+# Define provider and region
+provider "aws" {
+  region = "us-east-1"
+}
+
+# Create key pair
+resource "aws_key_pair" "my_key_pair" {
+  key_name   = "my_key_pair"
+  public_key = file("~/.ssh/my_key_pair.pub")
+}
+
+# Create EC2 instance
+resource "aws_instance" "example" {
+  ami           = "ami-0c94855ba95c71c99"
+  instance_type = "t2.micro"
+  key_name      = aws_key_pair.my_key_pair.key_name
+  vpc_security_group_ids = [aws_security_group.instance.id]
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file("~/.ssh/my_key_pair")
+    host        = self.public_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo "<html><head><title>Hello World</title></head><body><h1>Hello World!</h1></body></html>" > /var/www/html/index.html"
+      "sudo yum update -y",
+      "sudo amazon-linux-extras install nginx1.12 -y",
+      "sudo systemctl start nginx",
+      "sudo systemctl enable nginx",
+      "sudo openssl req -new -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/nginx.key -out /etc/nginx/nginx.crt -subj '/CN=localhost'"
+    ]
+  }
+}
+
+# Create security group
+resource "aws_security_group" "instance" {
+  name        = "example-instance"
+  description = "Security group for example instance"
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Output the public IP address of the instance
+output "public_ip" {
+  value = aws_instance.example.public_ip
+}
